@@ -10,18 +10,18 @@ import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 
 type BuscarSearch = {
-  categoria?: string;
-  q?: string;
-  disp?: string;
-  nota?: number;
+  categoria?: string | undefined;
+  q?: string | undefined;
+  disp?: string | undefined;
+  nota?: number | undefined;
 };
 
 export const Route = createFileRoute("/buscar")({
   validateSearch: (search: Record<string, unknown>): BuscarSearch => ({
-    categoria: typeof search.categoria === "string" ? search.categoria : undefined,
-    q: typeof search.q === "string" ? search.q : undefined,
-    disp: typeof search.disp === "string" ? search.disp : undefined,
-    nota: typeof search.nota === "number" ? search.nota : undefined,
+    categoria: typeof search["categoria"] === "string" ? search["categoria"] : undefined,
+    q: typeof search["q"] === "string" ? search["q"] : undefined,
+    disp: typeof search["disp"] === "string" ? search["disp"] : undefined,
+    nota: typeof search["nota"] === "number" ? search["nota"] : undefined,
   }),
   head: () => ({
     meta: [

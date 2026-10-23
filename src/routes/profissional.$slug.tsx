@@ -15,7 +15,7 @@ import {
   ThumbsUp,
 } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
-import { AvailabilityBadge, Avatar, Rating, Stars } from "@/components/brand";
+import { AvailabilityBadge, Avatar, Rating, Stars, getDefaultWorkerPhoto } from "@/components/brand";
 import { QuoteModal } from "@/components/quote-modal";
 import { Button } from "@/components/ui/button";
 import { proQuery, favoritesQuery, toggleFavorite } from "@/lib/queries";
@@ -99,7 +99,7 @@ function ProPage() {
   const stats = data!;
   const avgRating =
     stats.reviews.length > 0
-      ? stats.reviews.reduce((a, r) => a + r.rating, 0) / stats.reviews.length
+      ? stats.reviews.reduce((a: number, r: { rating: number }) => a + r.rating, 0) / stats.reviews.length
       : 0;
 
   return (
@@ -118,7 +118,11 @@ function ProPage() {
         {/* Header card */}
         <div className="rounded-3xl border bg-card p-6 shadow-[var(--shadow-card)] space-y-4">
           <div className="flex items-start gap-4">
-            <Avatar src={pro.avatar_url} name={pro.name} className="h-24 w-24 shrink-0 text-2xl" />
+            <Avatar
+              src={pro.avatar_url || getDefaultWorkerPhoto(pro.business_name || pro.name)}
+              name={pro.business_name || pro.name}
+              className="h-24 w-24 shrink-0 text-2xl shadow-sm"
+            />
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-2 flex-wrap">
                 <h1 className="font-display text-2xl font-semibold leading-tight">
@@ -232,7 +236,7 @@ function ProPage() {
               <ImageIcon className="h-5 w-5 text-primary" /> Portfólio
             </h2>
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-              {stats.portfolio.map((item) => (
+              {stats.portfolio.map((item: any) => (
                 <button
                   key={item.id}
                   onClick={() => setLightbox(item.image_url)}
@@ -265,7 +269,7 @@ function ProPage() {
               </span>
             </h2>
             <div className="space-y-3">
-              {stats.reviews.map((rev) => (
+              {stats.reviews.map((rev: any) => (
                 <div
                   key={rev.id}
                   className="rounded-3xl border bg-card p-4 shadow-[var(--shadow-card)] space-y-2"
@@ -354,6 +358,9 @@ function ProPage() {
           onClose={() => setQuoteOpen(false)}
           professionalId={pro.id}
           professionalName={pro.business_name || pro.name}
+          professionalCategory={pro.categories?.name ?? undefined}
+          professionalAvatar={(pro.avatar_url || getDefaultWorkerPhoto(pro.business_name || pro.name)) ?? undefined}
+          professionalPhone={pro.whatsapp ?? undefined}
         />
       )}
     </AppShell>

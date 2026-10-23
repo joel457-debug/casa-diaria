@@ -1,9 +1,9 @@
 import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { Mail, Lock, Eye, EyeOff, User, Home } from "lucide-react";
+import { Mail, Lock, Eye, EyeOff, User, Home, Check } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { Button } from "@/components/ui/button";
 import {
@@ -18,17 +18,102 @@ import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { supabase } from "@/integrations/supabase/client";
 import { upsertUserProfile } from "@/lib/queries";
+import { useAuth } from "@/hooks/use-auth";
 import { Logo } from "@/components/brand";
 
 function translateAuthError(msg: string): string {
-  if (msg.includes("Invalid login credentials")) return "E-mail ou senha incorretos.";
-  if (msg.includes("User already registered")) return "Este e-mail já está cadastrado.";
-  if (msg.includes("Email not confirmed")) return "Por favor, confirme seu e-mail antes de entrar.";
-  if (msg.includes("Password should be at least")) return "A senha deve ter no mínimo 6 caracteres.";
+  if (!msg) return "";
+  const lower = msg.toLowerCase();
+
+  // Senhas fracas / conhecidas (Supabase password leak / easy to guess)
+  if (
+    lower.includes("weak and easy to guess") ||
+    lower.includes("known to be weak") ||
+    lower.includes("easy to guess") ||
+    lower.includes("too weak") ||
+    lower.includes("pwned")
+  ) {
+    return "Esta senha é muito comum ou fácil de adivinhar. Por favor, escolha uma senha mais segura.";
+  }
+
+  // Senha inválida ou curta
+  if (
+    lower.includes("password should be at least") ||
+    lower.includes("at least 6 characters") ||
+    lower.includes("at least 7 characters")
+  ) {
+    return "A senha deve ter no mínimo 7 caracteres.";
+  }
+  if (lower.includes("signup requires a valid password") || lower.includes("requires a valid password")) {
+    return "Por favor, informe uma senha válida.";
+  }
+
+  // Credenciais
+  if (lower.includes("invalid login credentials")) {
+    return "E-mail ou senha incorretos.";
+  }
+
+  // E-mail já cadastrado
+  if (
+    lower.includes("user already registered") ||
+    lower.includes("already registered") ||
+    lower.includes("already exists")
+  ) {
+    return "Este e-mail já está cadastrado. Tente entrar na sua conta.";
+  }
+
+  // Confirmação de e-mail
+  if (lower.includes("email not confirmed")) {
+    return "Por favor, confirme seu e-mail antes de entrar.";
+  }
+
+  // E-mail inválido
+  if (
+    lower.includes("valid email") ||
+    lower.includes("invalid email") ||
+    lower.includes("email address is invalid") ||
+    lower.includes("unable to validate email")
+  ) {
+    return "Por favor, informe um endereço de e-mail válido.";
+  }
+
+  // Limite de tentativas
+  if (
+    lower.includes("rate limit") ||
+    lower.includes("too many requests") ||
+    lower.includes("over_email_send_rate_limit") ||
+    lower.includes("over email rate limit")
+  ) {
+    return "Muitas tentativas em pouco tempo. Por favor, aguarde alguns instantes e tente novamente.";
+  }
+
+  // Erro de rede/conexão
+  if (
+    lower.includes("failed to fetch") ||
+    lower.includes("network error") ||
+    lower.includes("timeout")
+  ) {
+    return "Erro de conexão com o servidor. Verifique sua internet e tente novamente.";
+  }
+
+  // Se a mensagem ainda estiver em inglês, traduzir amigavelmente
+  if (lower.includes("password") || lower.includes("choose a different") || lower.includes("error")) {
+    return "Senha considerada insegura ou dados inválidos. Por favor, tente com outra senha.";
+  }
+
   return msg;
 }
 
+type AuthSearch = {
+  redirect?: string | undefined;
+  tab?: "login" | "signup" | undefined;
+};
+
 export const Route = createFileRoute("/auth")({
+  validateSearch: (search: Record<string, unknown>): AuthSearch => ({
+    redirect: typeof search["redirect"] === "string" ? search["redirect"] : undefined,
+    tab: search["tab"] === "signup" ? "signup" : search["tab"] === "login" ? "login" : undefined,
+  }),
   head: () => ({
     meta: [
       { title: "Entrar · Casa Diária" },
@@ -39,13 +124,47 @@ export const Route = createFileRoute("/auth")({
   component: AuthPage,
 });
 
+const EMAIL_REGEX = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9-]+(?:\.[a-zA-Z0-9-]+)*\.[a-zA-Z]{2,}$/;
+
+const PASSWORD_REQUIREMENTS = [
+  {
+    id: "length",
+    label: "No mínimo 7 caracteres",
+    test: (pwd: string) => pwd.length >= 7,
+  },
+  {
+    id: "uppercase",
+    label: "Pelo menos 1 letra maiúscula",
+    test: (pwd: string) => /[A-Z]/.test(pwd),
+  },
+  {
+    id: "number",
+    label: "Pelo menos 1 número",
+    test: (pwd: string) => /[0-9]/.test(pwd),
+  },
+];
+
 const loginSchema = z.object({
-  email: z.string().email("E-mail inválido"),
-  password: z.string().min(6, "Senha deve ter pelo menos 6 caracteres"),
+  email: z
+    .string()
+    .trim()
+    .min(1, "E-mail é obrigatório")
+    .regex(EMAIL_REGEX, "Digite um e-mail válido (ex: seu@email.com)"),
+  password: z.string().min(1, "Digite sua senha"),
 });
 
-const signupSchema = loginSchema.extend({
-  full_name: z.string().min(2, "Digite seu nome completo"),
+const signupSchema = z.object({
+  full_name: z.string().trim().min(2, "Digite seu nome completo"),
+  email: z
+    .string()
+    .trim()
+    .min(1, "E-mail é obrigatório")
+    .regex(EMAIL_REGEX, "Digite um e-mail válido (ex: seu@email.com)"),
+  password: z
+    .string()
+    .min(7, "A senha deve ter no mínimo 7 caracteres")
+    .regex(/[A-Z]/, "A senha deve conter pelo menos 1 letra maiúscula")
+    .regex(/[0-9]/, "A senha deve conter pelo menos 1 número"),
 });
 
 type LoginValues = z.infer<typeof loginSchema>;
@@ -54,11 +173,22 @@ type SignupValues = z.infer<typeof signupSchema>;
 function LoginForm({ onSuccess }: { onSuccess: () => void }) {
   const [showPwd, setShowPwd] = useState(false);
   const [error, setError] = useState("");
-  const form = useForm<LoginValues>({ resolver: zodResolver(loginSchema) });
+  const form = useForm<LoginValues>({
+    resolver: zodResolver(loginSchema),
+    mode: "onTouched",
+    defaultValues: { email: "", password: "" },
+  });
+
+  useEffect(() => {
+    if (error) setError("");
+  }, [form.watch("email"), form.watch("password")]);
 
   async function onSubmit(values: LoginValues) {
     setError("");
-    const { error } = await supabase.auth.signInWithPassword(values);
+    const { error } = await supabase.auth.signInWithPassword({
+      email: values.email.trim().toLowerCase(),
+      password: values.password,
+    });
     if (error) setError(translateAuthError(error.message));
     else onSuccess();
   }
@@ -75,7 +205,13 @@ function LoginForm({ onSuccess }: { onSuccess: () => void }) {
               <FormControl>
                 <div className="relative">
                   <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                  <Input id="login-email" placeholder="seu@email.com" className="pl-10 rounded-2xl" {...field} />
+                  <Input
+                    id="login-email"
+                    type="email"
+                    placeholder="seu@email.com"
+                    className="pl-10 rounded-2xl"
+                    {...field}
+                  />
                 </div>
               </FormControl>
               <FormMessage />
@@ -125,20 +261,37 @@ function SignupForm({ onSuccess }: { onSuccess: () => void }) {
   const [showPwd, setShowPwd] = useState(false);
   const [error, setError] = useState("");
   const [done, setDone] = useState(false);
-  const form = useForm<SignupValues>({ resolver: zodResolver(signupSchema) });
+  const form = useForm<SignupValues>({
+    resolver: zodResolver(signupSchema),
+    defaultValues: { full_name: "", email: "", password: "" },
+  });
+
+  const passwordValue = form.watch("password") || "";
+  const emailValue = form.watch("email") || "";
+
+  useEffect(() => {
+    if (error) setError("");
+  }, [passwordValue, emailValue]);
 
   async function onSubmit(values: SignupValues) {
     setError("");
+    const cleanEmail = values.email.trim().toLowerCase();
+
+    if (!EMAIL_REGEX.test(cleanEmail)) {
+      setError("Por favor, insira um e-mail válido (ex: seu@email.com).");
+      return;
+    }
+
     const { data, error } = await supabase.auth.signUp({
-      email: values.email,
+      email: cleanEmail,
       password: values.password,
-      options: { data: { full_name: values.full_name } },
+      options: { data: { full_name: values.full_name.trim() } },
     });
     if (error) {
       setError(translateAuthError(error.message));
     } else {
       if (data.user) {
-        await upsertUserProfile({ id: data.user.id, full_name: values.full_name }).catch(() => {});
+        await upsertUserProfile({ id: data.user.id, full_name: values.full_name.trim() }).catch(() => { });
       }
       if (data.session) {
         onSuccess();
@@ -192,7 +345,13 @@ function SignupForm({ onSuccess }: { onSuccess: () => void }) {
               <FormControl>
                 <div className="relative">
                   <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                  <Input id="signup-email" placeholder="seu@email.com" className="pl-10 rounded-2xl" {...field} />
+                  <Input
+                    id="signup-email"
+                    type="email"
+                    placeholder="seu@email.com"
+                    className="pl-10 rounded-2xl"
+                    {...field}
+                  />
                 </div>
               </FormControl>
               <FormMessage />
@@ -211,7 +370,7 @@ function SignupForm({ onSuccess }: { onSuccess: () => void }) {
                   <Input
                     id="signup-password"
                     type={showPwd ? "text" : "password"}
-                    placeholder="mínimo 6 caracteres"
+                    placeholder="mínimo 7 caracteres"
                     className="pl-10 pr-10 rounded-2xl"
                     {...field}
                   />
@@ -229,6 +388,33 @@ function SignupForm({ onSuccess }: { onSuccess: () => void }) {
             </FormItem>
           )}
         />
+
+        {/* Requisitos da senha */}
+        <div className="rounded-2xl bg-muted/60 p-3 space-y-1.5 border border-border/40 text-xs">
+          <p className="font-medium text-foreground text-[11px] uppercase tracking-wider">
+            Requisitos da senha:
+          </p>
+          <ul className="space-y-1 pt-0.5">
+            {PASSWORD_REQUIREMENTS.map((req) => {
+              const isMet = req.test(passwordValue);
+              return (
+                <li
+                  key={req.id}
+                  className={`flex items-center gap-2 transition-colors duration-150 ${isMet ? "text-primary font-medium" : "text-muted-foreground"
+                    }`}
+                >
+                  {isMet ? (
+                    <Check className="h-3.5 w-3.5 text-primary shrink-0 stroke-[2.5]" />
+                  ) : (
+                    <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground/40 shrink-0 ml-1 mr-1" />
+                  )}
+                  <span>{req.label}</span>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+
         {error && <p className="text-sm text-destructive">{error}</p>}
         <Button type="submit" id="signup-submit" className="w-full rounded-full" disabled={form.formState.isSubmitting}>
           {form.formState.isSubmitting ? "Criando conta…" : "Criar conta"}
@@ -240,7 +426,20 @@ function SignupForm({ onSuccess }: { onSuccess: () => void }) {
 
 function AuthPage() {
   const navigate = useNavigate();
-  const goHome = () => navigate({ to: "/" });
+  const { user, loading } = useAuth();
+  const search = Route.useSearch();
+  const redirectTarget = search.redirect || "/";
+  const isProSignup = search.redirect === "/painel";
+  const initialTab = search.tab || (isProSignup ? "signup" : "login");
+  const [tab, setTab] = useState<string>(initialTab);
+
+  useEffect(() => {
+    if (!loading && user) {
+      navigate({ to: redirectTarget as any });
+    }
+  }, [user, loading, navigate, redirectTarget]);
+
+  const handleSuccess = () => navigate({ to: redirectTarget as any });
 
   return (
     <div className="min-h-screen bg-hero flex flex-col items-center justify-center px-4 py-12">
@@ -252,7 +451,18 @@ function AuthPage() {
 
         {/* Card */}
         <div className="rounded-3xl bg-card shadow-[var(--shadow-card)] p-6">
-          <Tabs defaultValue="login">
+          {isProSignup && (
+            <div className="mb-5 rounded-2xl bg-primary-soft/80 p-3.5 border border-primary/20 text-center">
+              <p className="text-xs font-bold text-primary-deep flex items-center justify-center gap-1.5">
+                <span>💼</span> Cadastro de Profissional
+              </p>
+              <p className="text-[12px] text-muted-foreground mt-1">
+                Crie sua conta ou faça login para ativar seu perfil profissional.
+              </p>
+            </div>
+          )}
+
+          <Tabs value={tab} onValueChange={setTab}>
             <TabsList className="w-full rounded-2xl mb-6" id="auth-tabs">
               <TabsTrigger value="login" className="flex-1 rounded-xl" id="tab-login">
                 Entrar
@@ -263,10 +473,10 @@ function AuthPage() {
             </TabsList>
 
             <TabsContent value="login">
-              <LoginForm onSuccess={goHome} />
+              <LoginForm onSuccess={handleSuccess} />
             </TabsContent>
             <TabsContent value="signup">
-              <SignupForm onSuccess={goHome} />
+              <SignupForm onSuccess={handleSuccess} />
             </TabsContent>
           </Tabs>
         </div>

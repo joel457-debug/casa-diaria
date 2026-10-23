@@ -1,5 +1,5 @@
 import { Link } from "@tanstack/react-router";
-import { Heart, Home, ClipboardList, Search, User } from "lucide-react";
+import { Heart, Home, ClipboardList, Search, User, MessageSquare } from "lucide-react";
 import type { ReactNode } from "react";
 import { useAuth } from "@/hooks/use-auth";
 import { Logo } from "./brand";
@@ -9,6 +9,7 @@ const nav = [
   { to: "/", label: "Início", icon: Home },
   { to: "/buscar", label: "Buscar", icon: Search },
   { to: "/pedidos", label: "Pedidos", icon: ClipboardList },
+  { to: "/mensagens", label: "Mensagens", icon: MessageSquare },
   { to: "/favoritos", label: "Favoritos", icon: Heart },
   { to: "/perfil", label: "Perfil", icon: User },
 ] as const;
@@ -41,7 +42,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               <Button asChild variant="ghost" size="sm" className="rounded-full h-9 w-9 p-0">
                 <Link to="/perfil" aria-label="Meu perfil">
                   <span className="flex h-8 w-8 items-center justify-center rounded-full bg-primary-soft text-primary-deep font-semibold text-sm">
-                    {user.user_metadata?.full_name?.charAt(0)?.toUpperCase() ?? user.email?.charAt(0)?.toUpperCase() ?? "U"}
+                    {(user.user_metadata?.["full_name"] as string | undefined)?.charAt(0)?.toUpperCase() ?? user.email?.charAt(0)?.toUpperCase() ?? "U"}
                   </span>
                 </Link>
               </Button>
@@ -57,7 +58,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       <footer className="mt-16 hidden border-t py-8 text-center text-sm text-muted-foreground md:block">
         Casa Diária · Gurupi - TO · Precisou? Casa Diária resolve.
       </footer>
-      <nav className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-5 border-t bg-card md:hidden">
+      <nav className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-6 border-t bg-card md:hidden">
         {nav.map((n) => (
           <Link
             key={n.to}

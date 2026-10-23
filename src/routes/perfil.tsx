@@ -58,14 +58,18 @@ function PerfilPage() {
   const form = useForm<FormValues>({
     resolver: zodResolver(schema),
     values: {
-      full_name: profile?.full_name ?? user?.user_metadata?.full_name ?? "",
+      full_name: profile?.full_name ?? (user?.user_metadata?.["full_name"] as string | undefined) ?? "",
       phone: profile?.phone ?? "",
     },
   });
 
   async function onSubmit(values: FormValues) {
     if (!user) return;
-    await upsertUserProfile({ id: user.id, ...values });
+    await upsertUserProfile({
+      id: user.id,
+      full_name: values.full_name || undefined,
+      phone: values.phone || undefined,
+    });
     qc.invalidateQueries({ queryKey: ["user-profile"] });
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
@@ -125,7 +129,7 @@ function PerfilPage() {
               <div className="flex items-center gap-4">
                 <div className="relative">
                   <Avatar
-                    src={profile?.avatar_url}
+                    src={profile?.avatar_url ?? null}
                     name={profile?.full_name ?? user.email ?? "U"}
                     className="h-20 w-20 text-xl"
                   />
@@ -150,7 +154,7 @@ function PerfilPage() {
                 </div>
                 <div className="min-w-0">
                   <p className="font-semibold truncate">
-                    {profile?.full_name ?? user.user_metadata?.full_name ?? "Usuário"}
+                    {profile?.full_name ?? (user.user_metadata?.["full_name"] as string | undefined) ?? "Usuário"}
                   </p>
                   <p className="text-sm text-muted-foreground truncate">{user.email}</p>
                 </div>
@@ -158,7 +162,7 @@ function PerfilPage() {
             </div>
 
             {/* Professional quick access */}
-            {pro && (
+            {pro ? (
               <div className="rounded-3xl border border-primary/20 bg-primary-soft/40 p-5 flex items-center justify-between shadow-[var(--shadow-card)]">
                 <div>
                   <h3 className="font-semibold text-primary-deep">Painel do Profissional</h3>
@@ -166,6 +170,20 @@ function PerfilPage() {
                 </div>
                 <Button asChild className="rounded-full shadow-sm" size="sm">
                   <Link to="/painel">Acessar painel</Link>
+                </Button>
+              </div>
+            ) : (
+              <div className="rounded-3xl border border-dashed border-primary/30 bg-primary-soft/30 p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-[var(--shadow-card)]">
+                <div>
+                  <h3 className="font-semibold text-primary-deep flex items-center gap-1.5">
+                    <span>💼</span> É profissional? Divulgue seu trabalho
+                  </h3>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    Crie seu perfil profissional para oferecer serviços e receber pedidos de orçamento em Gurupi.
+                  </p>
+                </div>
+                <Button asChild className="rounded-full shadow-sm shrink-0" size="sm">
+                  <Link to="/painel">Cadastrar como profissional</Link>
                 </Button>
               </div>
             )}

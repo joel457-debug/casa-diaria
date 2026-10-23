@@ -1,5 +1,6 @@
 import { queryOptions } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { slugify } from "@/lib/format";
 
 export const categoriesQuery = queryOptions({
   queryKey: ["categories"],
@@ -10,7 +11,12 @@ export const categoriesQuery = queryOptions({
   },
 });
 
-export type ProFilters = { q?: string; categoria?: string; disp?: string; nota?: number };
+export type ProFilters = {
+  q?: string | undefined;
+  categoria?: string | undefined;
+  disp?: string | undefined;
+  nota?: number | undefined;
+};
 
 const proSelect = "*, categories(name, slug)";
 
@@ -52,7 +58,9 @@ export const prosQuery = (f: ProFilters) =>
     },
   });
 
-export type ProRow = Awaited<ReturnType<NonNullable<ReturnType<typeof prosQuery>["queryFn"]>>>[number];
+export type ProRow = Awaited<
+  ReturnType<NonNullable<ReturnType<typeof prosQuery>["queryFn"]>>
+>[number];
 
 export const proQuery = (slug: string) =>
   queryOptions({
@@ -65,12 +73,39 @@ export const proQuery = (slug: string) =>
         .maybeSingle();
       if (error) throw error;
       if (!pro) return null;
-      const [{ data: portfolio }, { data: reviews }, { data: days }] = await Promise.all([
-        supabase.from("portfolio_items").select("*").eq("professional_id", pro.id).order("created_at", { ascending: false }),
-        supabase.from("reviews").select("*").eq("professional_id", pro.id).order("created_at", { ascending: false }),
-        supabase.from("availability_days").select("*").eq("professional_id", pro.id).gte("day", new Date().toISOString().slice(0, 10)),
+
+      // Fetch secondary data — treat each failure as empty to avoid crashing the page
+      const [portfolio, reviews, days] = await Promise.all([
+        Promise.resolve(
+          supabase
+            .from("portfolio_items")
+            .select("*")
+            .eq("professional_id", pro.id)
+            .order("created_at", { ascending: false }),
+        )
+          .then(({ data }) => data ?? [])
+          .catch(() => []),
+        Promise.resolve(
+          supabase
+            .from("reviews")
+            .select("*")
+            .eq("professional_id", pro.id)
+            .order("created_at", { ascending: false }),
+        )
+          .then(({ data }) => data ?? [])
+          .catch(() => []),
+        Promise.resolve(
+          supabase
+            .from("availability_days")
+            .select("*")
+            .eq("professional_id", pro.id)
+            .gte("day", new Date().toISOString().slice(0, 10)),
+        )
+          .then(({ data }) => data ?? [])
+          .catch(() => []),
       ]);
-      return { pro, portfolio: portfolio ?? [], reviews: reviews ?? [], days: days ?? [] };
+
+      return { pro, portfolio, reviews, days };
     },
   });
 
@@ -78,7 +113,9 @@ export async function uploadMedia(userId: string, file: File) {
   const path = `${userId}/${crypto.randomUUID()}-${file.name.replace(/[^a-zA-Z0-9.]/g, "")}`;
   const { error } = await supabase.storage.from("media").upload(path, file);
   if (error) throw error;
-  const { data, error: e2 } = await supabase.storage.from("media").createSignedUrl(path, 60 * 60 * 24 * 365 * 10);
+  const { data, error: e2 } = await supabase.storage
+    .from("media")
+    .createSignedUrl(path, 60 * 60 * 24 * 365 * 10);
   if (e2) throw e2;
   return data.signedUrl;
 }
@@ -149,7 +186,9 @@ export const clientQuotesQuery = (userId: string) =>
     queryFn: async () => {
       const { data, error } = await supabase
         .from("quote_requests")
-        .select("*, professionals(name, business_name, slug, avatar_url, whatsapp, categories(name))")
+        .select(
+          "*, professionals(name, business_name, slug, avatar_url, whatsapp, categories(name))",
+        )
         .eq("client_id", userId)
         .order("created_at", { ascending: false });
       if (error) throw error;
@@ -172,15 +211,89 @@ export const proQuotesQuery = (professionalId: string) =>
     },
   });
 
+export const conversationRequestsQuery = (userId: string) =>
+  queryOptions({
+    queryKey: ["conversation-requests", userId],
+    enabled: !!userId,
+    queryFn: async () => {
+      const [clientResult, professionalResult] = await Promise.all([
+        supabase
+          .from("quote_requests")
+          .select("*, professionals(id, user_id, name, business_name, avatar_url)")
+          .eq("client_id", userId),
+        supabase.from("professionals").select("id").eq("user_id", userId),
+      ]);
+      if (clientResult.error) throw clientResult.error;
+      if (professionalResult.error) throw professionalResult.error;
+
+      const professionalIds = (professionalResult.data ?? []).map((pro) => pro.id);
+      const professionalRequests =
+        professionalIds.length > 0
+          ? await supabase
+              .from("quote_requests")
+              .select("*, professionals(id, user_id, name, business_name, avatar_url)")
+              .in("professional_id", professionalIds)
+          : { data: [], error: null };
+      if (professionalRequests.error) throw professionalRequests.error;
+
+      const requests = new Map(
+        [...(clientResult.data ?? []), ...(professionalRequests.data ?? [])].map((request) => [
+          request.id,
+          request,
+        ]),
+      );
+      return [...requests.values()].sort(
+        (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
+      );
+    },
+  });
+
+export const requestMessagesQuery = (requestId: string) =>
+  queryOptions({
+    queryKey: ["request-messages", requestId],
+    enabled: !!requestId,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("messages")
+        .select("*")
+        .eq("request_id", requestId)
+        .order("created_at", { ascending: true });
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
+
+export async function sendRequestMessage(
+  requestId: string,
+  senderId: string,
+  body: string,
+  location?: { latitude: number; longitude: number; accuracyMeters: number | null },
+) {
+  const { error } = await supabase.from("messages").insert({
+    request_id: requestId,
+    sender_id: senderId,
+    body: body.trim(),
+    ...(location
+      ? {
+          location_latitude: location.latitude,
+          location_longitude: location.longitude,
+          location_accuracy_meters: location.accuracyMeters,
+        }
+      : {}),
+  });
+  if (error) throw error;
+}
+
 export async function createQuoteRequest(payload: {
   professional_id: string;
-  client_id: string;
+  client_id?: string | null | undefined;
   client_name: string;
   description: string;
-  address?: string;
-  preferred_date?: string;
+  address?: string | undefined;
+  preferred_date?: string | undefined;
+  client_phone?: string | undefined;
 }) {
-  const { error } = await supabase.from("quote_requests").insert(payload);
+  const { error } = await supabase.from("quote_requests").insert(payload as any);
   if (error) throw error;
 }
 
@@ -196,10 +309,7 @@ export async function respondToQuote(
   if (error) throw error;
 }
 
-export async function updateQuoteStatus(
-  id: string,
-  status: "aceito" | "cancelado" | "concluido",
-) {
+export async function updateQuoteStatus(id: string, status: "aceito" | "cancelado" | "concluido") {
   const { error } = await supabase.from("quote_requests").update({ status }).eq("id", id);
   if (error) throw error;
 }
@@ -223,24 +333,27 @@ export const userProfileQuery = (userId: string) =>
 
 export async function upsertUserProfile(profile: {
   id: string;
-  full_name?: string;
-  phone?: string;
-  avatar_url?: string;
+  full_name?: string | undefined;
+  phone?: string | undefined;
+  avatar_url?: string | undefined;
 }) {
-  const { error } = await supabase.from("profiles").upsert(profile, { onConflict: "id" });
+  const { error } = await supabase.from("profiles").upsert(profile as any, { onConflict: "id" });
   if (error) throw error;
 
   // Also sync avatar_url and name to professionals if the user is a registered professional
-  const proUpdates: Record<string, string> = {};
-  if (profile.avatar_url) proUpdates.avatar_url = profile.avatar_url;
-  if (profile.full_name) proUpdates.name = profile.full_name;
+  const proUpdates: Record<string, any> = {};
+  if (profile.avatar_url) proUpdates["avatar_url"] = profile.avatar_url;
+  if (profile.full_name) proUpdates["name"] = profile.full_name;
 
   if (Object.keys(proUpdates).length > 0) {
-    await supabase
-      .from("professionals")
-      .update(proUpdates)
-      .eq("user_id", profile.id)
-      .catch(() => {});
+    try {
+      await supabase
+        .from("professionals")
+        .update(proUpdates as any)
+        .eq("user_id", profile.id);
+    } catch {
+      // ignore
+    }
   }
 }
 
@@ -309,6 +422,44 @@ export const myPortfolioQuery = (professionalId: string) =>
     },
   });
 
+export async function createProfessionalProfile(payload: {
+  user_id: string;
+  name: string;
+  business_name?: string | undefined;
+  category_id?: string | undefined;
+  whatsapp?: string | undefined;
+  city?: string | undefined;
+  bio?: string | undefined;
+}) {
+  const baseSlug = slugify(payload.business_name || payload.name || "profissional");
+  const randomSuffix = Math.floor(1000 + Math.random() * 9000);
+  const slug = `${baseSlug}-${randomSuffix}`;
+
+  const { data, error } = await supabase
+    .from("professionals")
+    .insert({
+      user_id: payload.user_id,
+      name: payload.name,
+      business_name: payload.business_name || payload.name,
+      slug,
+      category_id: payload.category_id || null,
+      whatsapp: payload.whatsapp || null,
+      city: payload.city || "Gurupi - TO",
+      bio: payload.bio || null,
+      availability: "disponivel",
+      price_type: "consulta",
+      published: true,
+      specialties: [],
+      regions: ["Gurupi"],
+      verified: false,
+    } as any)
+    .select()
+    .single();
+
+  if (error) throw error;
+  return data;
+}
+
 export async function updateProfessional(
   id: string,
   payload: Partial<{
@@ -326,7 +477,10 @@ export async function updateProfessional(
     published: boolean;
   }>,
 ) {
-  const { error } = await supabase.from("professionals").update(payload).eq("id", id);
+  const { error } = await supabase
+    .from("professionals")
+    .update(payload as any)
+    .eq("id", id);
   if (error) throw error;
 }
 
@@ -363,15 +517,15 @@ export async function createReview(payload: {
   professional_id: string;
   client_id: string;
   reviewer_name: string;
-  request_id?: string;
+  request_id?: string | undefined;
   rating: number;
-  comment?: string;
-  quality?: number;
-  punctuality?: number;
-  price_transparency?: number;
-  would_recommend?: boolean;
+  comment?: string | undefined;
+  quality?: number | undefined;
+  punctuality?: number | undefined;
+  price_transparency?: number | undefined;
+  would_recommend?: boolean | undefined;
 }) {
-  const { error } = await supabase.from("reviews").insert(payload);
+  const { error } = await supabase.from("reviews").insert(payload as any);
   if (error) throw error;
 }
 
@@ -379,4 +533,3 @@ export async function replyToReview(reviewId: string, pro_reply: string) {
   const { error } = await supabase.from("reviews").update({ pro_reply }).eq("id", reviewId);
   if (error) throw error;
 }
-

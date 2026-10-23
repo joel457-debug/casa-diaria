@@ -28,7 +28,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .from("user_roles")
       .select("role")
       .eq("user_id", user.id)
-      .then(({ data }) => setIsAdmin(!!data?.some((r) => r.role === "admin")));
+      .then(({ data, error }) => {
+        if (error) {
+          // Tabela ainda não configurada ou sem permissão — não é admin
+          setIsAdmin(false);
+          return;
+        }
+        setIsAdmin(!!data?.some((r) => r.role === "admin"));
+      });
   }, [user]);
 
   return <Ctx.Provider value={{ user, loading, isAdmin }}>{children}</Ctx.Provider>;

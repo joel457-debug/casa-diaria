@@ -62,8 +62,68 @@ export function Stars({ value, onChange }: { value: number; onChange?: (v: numbe
   );
 }
 
-export function Avatar({ src, name, className }: { src?: string | null; name?: string | null; className?: string }) {
-  if (src) return <img src={src} alt={name || "Avatar"} className={cn("rounded-2xl object-cover", className)} />;
+import proCarlos from "@/assets/pro_carlos.jpg";
+import catEletrica from "@/assets/cat_eletrica.jpg";
+import catHidraulica from "@/assets/cat_hidraulica.jpg";
+import catJardinagem from "@/assets/cat_jardinagem.jpg";
+import catLimpeza from "@/assets/cat_limpeza.jpg";
+import catPintura from "@/assets/cat_pintura.jpg";
+import catMoveis from "@/assets/cat_moveis.jpg";
+
+export function getDefaultWorkerPhoto(name?: string | null): string | null {
+  if (!name) return null;
+  const n = name.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+
+  // Carlos / Faz-tudo / Pequenos reparos
+  if (n.includes("carlos") || n.includes("faz-tudo") || n.includes("faz tudo") || n.includes("pequenos")) {
+    return proCarlos;
+  }
+  // João / Elétrica
+  if (n.includes("eletric") || n.includes("joao") || n.includes("jb")) {
+    return catEletrica;
+  }
+  // Pedro / Hidráulica / Encanador
+  if (n.includes("hidraul") || n.includes("pedro") || n.includes("encan") || n.includes("lima")) {
+    return catHidraulica;
+  }
+  // Maria / Jardinagem / Quintal
+  if (n.includes("jard") || n.includes("maria") || n.includes("paisag") || n.includes("grama")) {
+    return catJardinagem;
+  }
+  // Ana / Limpeza / Diarista / Faxina
+  if (n.includes("limp") || n.includes("ana") || n.includes("faxin") || n.includes("diarista")) {
+    return catLimpeza;
+  }
+  // Lucas / Pintura / Pintor
+  if (n.includes("pint") || n.includes("lucas") || n.includes("textura")) {
+    return catPintura;
+  }
+  // Montagem / Móveis
+  if (n.includes("moveis") || n.includes("montag") || n.includes("sofa")) {
+    return catMoveis;
+  }
+  return null;
+}
+
+export function Avatar({
+  src,
+  name,
+  className,
+}: {
+  src?: string | null;
+  name?: string | null;
+  className?: string;
+}) {
+  const photo = src || getDefaultWorkerPhoto(name);
+  if (photo) {
+    return (
+      <img
+        src={photo}
+        alt={name || "Foto do profissional"}
+        className={cn("rounded-2xl object-cover shadow-xs", className)}
+      />
+    );
+  }
   const safeName = (name ?? "").trim() || "U";
   const initials = safeName
     .split(/\s+/)
@@ -73,7 +133,12 @@ export function Avatar({ src, name, className }: { src?: string | null; name?: s
     .join("")
     .toUpperCase();
   return (
-    <div className={cn("flex items-center justify-center rounded-2xl bg-primary-soft font-display font-semibold text-primary-deep", className)}>
+    <div
+      className={cn(
+        "flex items-center justify-center rounded-2xl bg-primary-soft font-display font-semibold text-primary-deep",
+        className,
+      )}
+    >
       {initials || "U"}
     </div>
   );

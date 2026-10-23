@@ -13,6 +13,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthRouteImport } from './routes/auth'
 import { Route as BuscarRouteImport } from './routes/buscar'
 import { Route as FavoritosRouteImport } from './routes/favoritos'
+import { Route as MensagensRouteImport } from './routes/mensagens'
 import { Route as PainelRouteImport } from './routes/painel'
 import { Route as PedidosRouteImport } from './routes/pedidos'
 import { Route as PerfilRouteImport } from './routes/perfil'
@@ -36,6 +37,11 @@ const BuscarRoute = BuscarRouteImport.update({
 const FavoritosRoute = FavoritosRouteImport.update({
   id: '/favoritos',
   path: '/favoritos',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const MensagensRoute = MensagensRouteImport.update({
+  id: '/mensagens',
+  path: '/mensagens',
   getParentRoute: () => rootRouteImport,
 } as any)
 const PainelRoute = PainelRouteImport.update({
@@ -64,6 +70,7 @@ export interface FileRoutesByFullPath {
   '/auth': typeof AuthRoute
   '/buscar': typeof BuscarRoute
   '/favoritos': typeof FavoritosRoute
+  '/mensagens': typeof MensagensRoute
   '/painel': typeof PainelRoute
   '/pedidos': typeof PedidosRoute
   '/perfil': typeof PerfilRoute
@@ -74,6 +81,7 @@ export interface FileRoutesByTo {
   '/auth': typeof AuthRoute
   '/buscar': typeof BuscarRoute
   '/favoritos': typeof FavoritosRoute
+  '/mensagens': typeof MensagensRoute
   '/painel': typeof PainelRoute
   '/pedidos': typeof PedidosRoute
   '/perfil': typeof PerfilRoute
@@ -85,6 +93,7 @@ export interface FileRoutesById {
   '/auth': typeof AuthRoute
   '/buscar': typeof BuscarRoute
   '/favoritos': typeof FavoritosRoute
+  '/mensagens': typeof MensagensRoute
   '/painel': typeof PainelRoute
   '/pedidos': typeof PedidosRoute
   '/perfil': typeof PerfilRoute
@@ -97,6 +106,7 @@ export interface FileRouteTypes {
     | '/auth'
     | '/buscar'
     | '/favoritos'
+    | '/mensagens'
     | '/painel'
     | '/pedidos'
     | '/perfil'
@@ -107,6 +117,7 @@ export interface FileRouteTypes {
     | '/auth'
     | '/buscar'
     | '/favoritos'
+    | '/mensagens'
     | '/painel'
     | '/pedidos'
     | '/perfil'
@@ -117,6 +128,7 @@ export interface FileRouteTypes {
     | '/auth'
     | '/buscar'
     | '/favoritos'
+    | '/mensagens'
     | '/painel'
     | '/pedidos'
     | '/perfil'
@@ -128,6 +140,7 @@ export interface RootRouteChildren {
   AuthRoute: typeof AuthRoute
   BuscarRoute: typeof BuscarRoute
   FavoritosRoute: typeof FavoritosRoute
+  MensagensRoute: typeof MensagensRoute
   PainelRoute: typeof PainelRoute
   PedidosRoute: typeof PedidosRoute
   PerfilRoute: typeof PerfilRoute
@@ -162,6 +175,13 @@ declare module '@tanstack/react-router' {
       path: '/favoritos'
       fullPath: '/favoritos'
       preLoaderRoute: typeof FavoritosRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/mensagens': {
+      id: '/mensagens'
+      path: '/mensagens'
+      fullPath: '/mensagens'
+      preLoaderRoute: typeof MensagensRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/painel': {
@@ -200,6 +220,7 @@ const rootRouteChildren: RootRouteChildren = {
   AuthRoute: AuthRoute,
   BuscarRoute: BuscarRoute,
   FavoritosRoute: FavoritosRoute,
+  MensagensRoute: MensagensRoute,
   PainelRoute: PainelRoute,
   PedidosRoute: PedidosRoute,
   PerfilRoute: PerfilRoute,

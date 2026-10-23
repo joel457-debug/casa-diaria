@@ -59,6 +59,8 @@ import {
   addPortfolioItem,
   deletePortfolioItem,
   uploadMedia,
+  categoriesQuery,
+  createProfessionalProfile,
 } from "@/lib/queries";
 import { requestStatusLabel } from "@/lib/format";
 import { useAuth } from "@/hooks/use-auth";
@@ -363,7 +365,7 @@ function SettingsTab({ pro }: { pro: any }) {
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
 
   const form = useForm<SettingsValues>({
-    resolver: zodResolver(settingsSchema),
+    resolver: zodResolver(settingsSchema) as any,
     values: {
       business_name: pro.business_name ?? "",
       bio: pro.bio ?? "",
@@ -403,12 +405,12 @@ function SettingsTab({ pro }: { pro: any }) {
 
   return (
     <Form {...form}>
-      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+      <form onSubmit={form.handleSubmit(onSubmit as any)} className="space-y-4">
         <div className="rounded-3xl border bg-card p-5 shadow-[var(--shadow-card)] space-y-4">
           <h3 className="font-semibold">Identidade</h3>
 
           <FormField
-            control={form.control}
+            control={form.control as any}
             name="business_name"
             render={({ field }) => (
               <FormItem>
@@ -422,7 +424,7 @@ function SettingsTab({ pro }: { pro: any }) {
           />
 
           <FormField
-            control={form.control}
+            control={form.control as any}
             name="bio"
             render={({ field }) => (
               <FormItem>
@@ -444,7 +446,7 @@ function SettingsTab({ pro }: { pro: any }) {
         <div className="rounded-3xl border bg-card p-5 shadow-[var(--shadow-card)] space-y-4">
           <h3 className="font-semibold">Contato</h3>
           <FormField
-            control={form.control}
+            control={form.control as any}
             name="whatsapp"
             render={({ field }) => (
               <FormItem>
@@ -459,7 +461,7 @@ function SettingsTab({ pro }: { pro: any }) {
             )}
           />
           <FormField
-            control={form.control}
+            control={form.control as any}
             name="instagram"
             render={({ field }) => (
               <FormItem>
@@ -479,7 +481,7 @@ function SettingsTab({ pro }: { pro: any }) {
           <h3 className="font-semibold">Preço e disponibilidade</h3>
           <div className="grid gap-4 sm:grid-cols-2">
             <FormField
-              control={form.control}
+              control={form.control as any}
               name="price_type"
               render={({ field }) => (
                 <FormItem>
@@ -503,7 +505,7 @@ function SettingsTab({ pro }: { pro: any }) {
               )}
             />
             <FormField
-              control={form.control}
+              control={form.control as any}
               name="price_value"
               render={({ field }) => (
                 <FormItem>
@@ -515,6 +517,7 @@ function SettingsTab({ pro }: { pro: any }) {
                       className="rounded-2xl"
                       placeholder="0,00"
                       {...field}
+                      value={field.value ?? ""}
                     />
                   </FormControl>
                   <FormMessage />
@@ -523,7 +526,7 @@ function SettingsTab({ pro }: { pro: any }) {
             />
           </div>
           <FormField
-            control={form.control}
+            control={form.control as any}
             name="price_notes"
             render={({ field }) => (
               <FormItem>
@@ -536,7 +539,7 @@ function SettingsTab({ pro }: { pro: any }) {
             )}
           />
           <FormField
-            control={form.control}
+            control={form.control as any}
             name="availability"
             render={({ field }) => (
               <FormItem>
@@ -558,7 +561,7 @@ function SettingsTab({ pro }: { pro: any }) {
             )}
           />
           <FormField
-            control={form.control}
+            control={form.control as any}
             name="published"
             render={({ field }) => (
               <FormItem>
@@ -760,6 +763,141 @@ function ProReviewsTab({ professionalId }: { professionalId: string }) {
   );
 }
 
+function RegisterProProfile({ user }: { user: any }) {
+  const qc = useQueryClient();
+  const { data: categories } = useQuery(categoriesQuery);
+  const [name, setName] = useState(
+    (user.user_metadata?.["full_name"] as string | undefined) || ""
+  );
+  const [businessName, setBusinessName] = useState("");
+  const [categoryId, setCategoryId] = useState("");
+  const [whatsapp, setWhatsapp] = useState("");
+  const [bio, setBio] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!name.trim()) {
+      setError("Por favor, informe seu nome.");
+      return;
+    }
+    setLoading(true);
+    setError("");
+    try {
+      await createProfessionalProfile({
+        user_id: user.id,
+        name: name.trim(),
+        business_name: businessName.trim() || undefined,
+        category_id: categoryId || undefined,
+        whatsapp: whatsapp.trim() || undefined,
+        bio: bio.trim() || undefined,
+      });
+      qc.invalidateQueries({ queryKey: ["my-pro"] });
+      qc.invalidateQueries({ queryKey: ["pros"] });
+    } catch (err: any) {
+      console.error(err);
+      setError(err?.message || "Erro ao cadastrar perfil profissional.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div className="rounded-3xl border bg-card p-6 sm:p-8 shadow-sm space-y-6">
+      <div className="text-center space-y-2 max-w-md mx-auto">
+        <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-primary-soft text-primary">
+          <LayoutDashboard className="h-8 w-8" />
+        </div>
+        <h2 className="font-display text-2xl font-bold">Ative seu perfil profissional</h2>
+        <p className="text-sm text-muted-foreground leading-relaxed">
+          Preencha seus dados de atendimento para começar a receber pedidos de orçamento e aparecer para clientes na Casa Diária.
+        </p>
+      </div>
+
+      <form onSubmit={handleSubmit} className="space-y-4 max-w-lg mx-auto">
+        <div>
+          <label className="text-xs font-semibold block mb-1.5">
+            Seu Nome Completo <span className="text-destructive">*</span>
+          </label>
+          <Input
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="Ex: Carlos Silva"
+            className="rounded-2xl"
+            required
+          />
+        </div>
+
+        <div>
+          <label className="text-xs font-semibold block mb-1.5">
+            Nome do Negócio / Nome Fantasia (opcional)
+          </label>
+          <Input
+            value={businessName}
+            onChange={(e) => setBusinessName(e.target.value)}
+            placeholder="Ex: Carlos Faz Tudo"
+            className="rounded-2xl"
+          />
+        </div>
+
+        <div>
+          <label className="text-xs font-semibold block mb-1.5">
+            Categoria Principal de Atuação
+          </label>
+          <select
+            value={categoryId}
+            onChange={(e) => setCategoryId(e.target.value)}
+            className="w-full h-11 px-3 rounded-2xl border bg-background text-sm"
+          >
+            <option value="">Selecione uma categoria...</option>
+            {categories?.map((cat) => (
+              <option key={cat.id} value={cat.id}>
+                {cat.name}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div>
+          <label className="text-xs font-semibold block mb-1.5">
+            WhatsApp para Contato
+          </label>
+          <Input
+            value={whatsapp}
+            onChange={(e) => setWhatsapp(e.target.value)}
+            placeholder="(63) 99999-9999"
+            className="rounded-2xl"
+          />
+        </div>
+
+        <div>
+          <label className="text-xs font-semibold block mb-1.5">
+            Apresentação dos seus serviços (opcional)
+          </label>
+          <Textarea
+            value={bio}
+            onChange={(e) => setBio(e.target.value)}
+            placeholder="Conte um pouco sobre suas especialidades, experiência e diferenciais…"
+            className="rounded-2xl resize-none"
+            rows={3}
+          />
+        </div>
+
+        {error && <p className="text-xs text-destructive">{error}</p>}
+
+        <Button
+          type="submit"
+          disabled={loading}
+          className="w-full rounded-full h-11 font-semibold text-white shadow-md bg-primary hover:bg-primary/95"
+        >
+          {loading ? "Cadastrando…" : "Concluir cadastro e ativar painel"}
+        </Button>
+      </form>
+    </div>
+  );
+}
+
 // ── Main page ───────────────────────────────────────────────────────────────
 
 function PainelPage() {
@@ -852,21 +990,25 @@ function PainelPage() {
         {!user ? (
           <div className="rounded-3xl border bg-card p-8 text-center space-y-4">
             <LayoutDashboard className="mx-auto h-12 w-12 text-muted-foreground/40" />
-            <p className="text-muted-foreground">Entre para acessar o painel do profissional.</p>
-            <Button asChild className="rounded-full">
-              <Link to="/auth">Entrar</Link>
-            </Button>
-          </div>
-        ) : !pro ? (
-          <div className="rounded-3xl border bg-card p-8 text-center space-y-4">
-            <LayoutDashboard className="mx-auto h-12 w-12 text-muted-foreground/40" />
-            <div>
-              <h2 className="font-display text-xl font-semibold">Você ainda não é um profissional</h2>
-              <p className="mt-1 text-sm text-muted-foreground">
-                Entre em contato com a administração para cadastrar seu perfil.
-              </p>
+            <h2 className="font-display text-xl font-semibold">Painel do Profissional</h2>
+            <p className="text-muted-foreground text-sm max-w-sm mx-auto">
+              Entre ou crie sua conta para acessar seu painel e receber solicitações de clientes em Gurupi-TO.
+            </p>
+            <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-2">
+              <Button asChild className="rounded-full px-6 w-full sm:w-auto">
+                <Link to="/auth" search={{ redirect: "/painel", tab: "signup" }}>
+                  Criar conta de profissional
+                </Link>
+              </Button>
+              <Button asChild variant="outline" className="rounded-full px-6 w-full sm:w-auto">
+                <Link to="/auth" search={{ redirect: "/painel", tab: "login" }}>
+                  Já tenho conta (Entrar)
+                </Link>
+              </Button>
             </div>
           </div>
+        ) : !pro ? (
+          <RegisterProProfile user={user} />
         ) : (
           <Tabs defaultValue="overview" id="painel-tabs">
             <TabsList className="w-full rounded-2xl mb-6 grid grid-cols-5">
